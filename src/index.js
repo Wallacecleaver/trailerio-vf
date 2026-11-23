@@ -20,6 +20,7 @@ const MANIFEST = {
 };
 
 const CACHE_TTL = 86400; // 24 hours
+const TMDB_API_KEY = 'bfe73358661a995b992ae9a812aa0d2f';
 
 // ============== UTILITIES ==============
 
@@ -38,12 +39,10 @@ async function fetchWithTimeout(url, options = {}, timeout = 8000) {
 
 // ============== TMDB METADATA ==============
 
-async function getTMDBMetadata(imdbId, type, tmdbApiKey) {
-  if (!tmdbApiKey) return null;
-
+async function getTMDBMetadata(imdbId, type = 'movie') {
   try {
     const findRes = await fetchWithTimeout(
-      `https://api.themoviedb.org/3/find/${imdbId}?api_key=${encodeURIComponent(tmdbApiKey)}&external_source=imdb_id`
+      `https://api.themoviedb.org/3/find/${imdbId}?api_key=${TMDB_API_KEY}&external_source=imdb_id`
     );
     const findData = await findRes.json();
 
@@ -68,7 +67,7 @@ async function getTMDBMetadata(imdbId, type, tmdbApiKey) {
 
     // Get external IDs including Wikidata
     const extRes = await fetchWithTimeout(
-      `https://api.themoviedb.org/3/${actualType === 'series' ? 'tv' : 'movie'}/${tmdbId}/external_ids?api_key=${encodeURIComponent(tmdbApiKey)}`
+      `https://api.themoviedb.org/3/${actualType === 'series' ? 'tv' : 'movie'}/${tmdbId}/external_ids?api_key=${TMDB_API_KEY}`
     );
     const extData = await extRes.json();
 
@@ -325,7 +324,7 @@ async function resolveIMDb(imdbId) {
 
 // ============== MAIN RESOLVER ==============
 
-async function resolveTrailers(imdbId, type, cache, tmdbApiKey) {
+async function resolveTrailers(imdbId, type, cache) {
   const cacheKey = `trailer:v13:${imdbId}`;
   const cached = await cache.match(new Request(`https://cache/${cacheKey}`));
   if (cached) {
@@ -333,7 +332,7 @@ async function resolveTrailers(imdbId, type, cache, tmdbApiKey) {
   }
 
   // Step 1: Get TMDB metadata (includes Wikidata ID)
-  const tmdbMeta = await getTMDBMetadata(imdbId, type, tmdbApiKey);
+  const tmdbMeta = await getTMDBMetadata(imdbId, type);
 
   // Step 2: Get Wikidata IDs (Apple TV, RT) if we have a Wikidata ID
   const wikidataIds = tmdbMeta?.wikidataId
@@ -419,7 +418,7 @@ export default {
       const [, type, id] = metaMatch;
       const imdbId = id.split(':')[0];
 
-      const result = await resolveTrailers(imdbId, type, cache, env.TMDB_API_KEY);
+      const result = await resolveTrailers(imdbId, type, cache);
 
       return new Response(JSON.stringify({
         meta: {

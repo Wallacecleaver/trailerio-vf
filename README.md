@@ -55,10 +55,6 @@ npx wrangler login
 npm run deploy
 ```
 
-### TMDB configuration
-
-Set `TMDB_API_KEY` as a Cloudflare Worker secret to enable TMDB metadata and the Apple TV and Rotten Tomatoes lookups that use it. In the Cloudflare dashboard, add it under **Settings → Variables and Secrets**. For local development, set it in `.dev.vars`, which Git ignores.
-
 ## Add to Fusion
 
 1. Open Fusion
