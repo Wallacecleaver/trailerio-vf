@@ -1,106 +1,64 @@
-# Trailerio Lite
+# Trailerio VF
 
-Minimal movie trailer addon for Fusion. Runs on Cloudflare Workers (free tier).
+Addon Fusion pour les bandes-annonces de films et de séries en français. Les titres sont demandés à TMDB en `fr-FR`. L’addon accepte les MP4 explicitement marqués VF par AlloCiné et ne conserve que les pistes audio françaises des bandes-annonces Apple TV. Si aucune source VF n’est confirmée, Fusion reçoit une liste vide.
 
-## What it does
+## Démarrer sur un VPS
 
-Finds the best available trailer for any movie/series by checking multiple sources in order:
+Avec Node.js 22 ou plus récent, aucune dépendance à installer pour le serveur.
 
-1. **Apple TV** - 4K HDR HLS streams
-2. **Plex** - 1080p from IVA CDN
-3. **Rotten Tomatoes** - 1080p from Fandango CDN
-4. **Digital Digest** - 4K from PeerTube
-5. **IMDb** - 1080p fallback
-
-Returns the first successful match. Results are cached for 24 hours.
-
-## Features
-
-- **Zero cost** - Runs on Cloudflare Workers free tier (100k requests/day)
-- **Zero storage** - Uses edge caching, no database needed
-- **Global** - Deployed to 300+ edge locations worldwide
-- **Fast** - Returns cached results instantly, fresh lookups in 2-8 seconds
-
-## Deploy to Cloudflare Workers
-
-### Option 1: Dashboard (Easiest)
-
-1. Go to [dash.cloudflare.com](https://dash.cloudflare.com)
-2. Click **Workers & Pages** → **Create application** → **Create Worker**
-3. Name it (e.g., `trailers`)
-4. Click **Deploy**
-5. Click **Edit code**
-6. Delete everything, paste contents of `src/index.js`
-7. Click **Save and deploy**
-
-Your addon URL: `https://trailers.YOUR-SUBDOMAIN.workers.dev/manifest.json`
-
-### Option 2: Git Integration
-
-1. Fork this repo
-2. Go to Cloudflare Dashboard → **Workers & Pages**
-3. Click **Create application** → **Connect to Git**
-4. Select your forked repo
-5. Deploy
-
-Auto-deploys on every push.
-
-### Option 3: Wrangler CLI
-
-```bash
-git clone https://github.com/9mousaa/trailerio-lite.git
-cd trailerio-lite
-npm install
-npx wrangler login
-npm run deploy
+```sh
+git clone https://github.com/Wallacecleaver/trailerio-vf.git
+cd trailerio-vf
+PUBLIC_URL=https://trailers.example.com npm start
 ```
 
-## Add to Fusion
+Le serveur écoute par défaut sur `127.0.0.1:7000`. Pour un test local, lance `npm start` sans `PUBLIC_URL` et ouvre `http://127.0.0.1:7000/manifest.json`.
 
-1. Open Fusion
-2. Go to **Addons**
-3. Enter your addon URL:
-   ```
-   https://YOUR-WORKER.workers.dev/manifest.json
-   ```
-4. Install
+### Docker
 
-## API Endpoints
-
-| Endpoint | Description |
-|----------|-------------|
-| `/manifest.json` | Addon manifest |
-| `/stream/movie/{imdbId}.json` | Get movie trailer |
-| `/stream/series/{imdbId}.json` | Get series trailer |
-| `/health` | Health check |
-
-## Example
-
-Request:
-```
-GET /stream/movie/tt15398776.json
+```sh
+docker build -t trailerio-vf .
+docker run -d --name trailerio-vf --restart unless-stopped \
+  -p 127.0.0.1:7000:7000 \
+  -e PUBLIC_URL=https://trailers.example.com \
+  trailerio-vf
 ```
 
-Response:
-```json
-{
-  "streams": [{
-    "url": "https://play.itunes.apple.com/.../playlist.m3u8",
-    "name": "▶️ 4K",
-    "title": "Trailer (Apple TV)"
-  }]
+### HTTPS et installation dans Fusion
+
+Fais pointer le domaine vers le VPS et configure un reverse proxy HTTPS vers le port `7000`. Avec Caddy, ajoute ce bloc à ton `Caddyfile` en remplaçant le domaine par le tien.
+
+```caddyfile
+trailers.example.com {
+  reverse_proxy 127.0.0.1:7000
 }
 ```
 
-## Limits
+Utilise la même adresse HTTPS pour `PUBLIC_URL`. Elle sert à construire les liens de lecture HLS sur le VPS. Dans Fusion, ajoute `https://trailers.example.com/manifest.json` dans **Addons**.
 
-Cloudflare Workers Free Tier:
-- 100,000 requests/day
-- 10ms CPU time per request
+### Variables d’environnement
 
-For higher limits, Workers Paid is $5/month for 10 million requests.
+| Variable | Valeur par défaut | Rôle |
+|---|---|---|
+| `HOST` | `127.0.0.1` hors Docker | Adresse d’écoute |
+| `PORT` | `7000` | Port d’écoute |
+| `PUBLIC_URL` | `http://127.0.0.1:7000` avec le port configuré | Adresse de l’addon visible par Fusion |
+| `TMDB_API_KEY` | Clé du projet | Remplace la clé utilisée pour les requêtes TMDB |
 
-## License
+### Vérifier le service
+
+```sh
+curl https://trailers.example.com/health
+curl https://trailers.example.com/manifest.json
+curl https://trailers.example.com/meta/movie/tt15398776.json
+```
+
+Pour lancer les tests du projet, utilise `npm test`.
+
+## Cloudflare Workers
+
+L’entrée `src/index.js` reste compatible avec le Worker configuré dans `wrangler.toml`. Avec Wrangler installé, utilise `npm run deploy`.
+
+## Licence
 
 MIT
-

@@ -1,10 +1,15 @@
 {
-  "name": "trailerio-lite",
-  "version": "1.0.0",
-  "description": "Minimal trailer resolver on Cloudflare Workers",
+  "name": "trailerio-vf",
+  "version": "1.1.0",
+  "description": "Bandes-annonces en français pour Fusion",
   "type": "module",
   "main": "src/index.js",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "tail": "wrangler tail"
