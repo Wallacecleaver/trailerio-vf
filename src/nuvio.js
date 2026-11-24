@@ -7,6 +7,10 @@ const SUBTITLED = /\b(?:V\.?O\.?\s*S\.?T\.?\s*(?:FR|F)?|V\.?O\.?|STFR|version or
 const FRENCH_TITLE = /\b(?:bande[\s-]annonce|teaser)\b/iu;
 const LANGUAGE = 'fr-FR';
 const DEADLINE_MS = 4200;
+const VERIFIED_TRAILERS = new Map([
+  // Comment braquer une banque — the public YouTube upload is explicitly labelled VF.
+  ['tt35866986', [{ key: 'uXFBBDDvCzk', name: 'Comment braquer une banque · Bande-annonce VF', site: 'YouTube', iso_639_1: 'fr', type: 'Trailer' }]]
+]);
 
 function trailersFrom(videos, originalLanguage, seasonNumber) {
   if (!Array.isArray(videos)) return [];
@@ -92,51 +96,55 @@ async function fallbackEpisodes(fetcher, details, tmdbId, playbackId, key, signa
   return episodes.length ? episodes : null;
 }
 
-export async function findNuvioMeta(fetcher, requestedId, type, key) {
+export async function findNuvioMeta(fetcher, requestedId, type, key, { allowEmptyTrailers = false } = {}) {
   const signal = AbortSignal.timeout(DEADLINE_MS);
   const byImdb = IMDb.test(requestedId);
   const cinemeta = byImdb ? fetchCinemeta(fetcher, type, requestedId, signal) : null;
   const tmdbId = byImdb ? (await findTmdbTitle(fetcher, requestedId, type, key, signal))?.id : Number(requestedId.slice(5));
-  if (!Number.isSafeInteger(tmdbId) || tmdbId < 1) return null;
-
+  const hasTmdbId = Number.isSafeInteger(tmdbId) && tmdbId > 0;
   const series = type === 'series';
-  const details = await readTmdb(fetcher, `${series ? 'tv' : 'movie'}/${tmdbId}`, key, {
+  const details = hasTmdbId ? await readTmdb(fetcher, `${series ? 'tv' : 'movie'}/${tmdbId}`, key, {
     language: LANGUAGE,
     append_to_response: 'videos,external_ids'
-  }, signal);
-  const name = series ? details?.name : details?.title;
-  if (typeof name !== 'string' || !name) return null;
+  }, signal) : null;
+  const imdb = byImdb ? requestedId : details?.external_ids?.imdb_id;
 
-  let trailers = trailersFrom(details.videos?.results, details.original_language);
-  if (!trailers.length && series) trailers = await seasonTrailers(fetcher, details, tmdbId, key, signal);
-  if (!trailers.length) return null;
+  const verified = series ? [] : VERIFIED_TRAILERS.get(imdb) || [];
+  let trailers = [
+    ...trailersFrom(verified),
+    ...trailersFrom(details?.videos?.results, details?.original_language)
+  ];
+  if (!trailers.length && series && details) trailers = await seasonTrailers(fetcher, details, tmdbId, key, signal);
+  if (!trailers.length && !allowEmptyTrailers) return null;
   trailers = sortTrailers(trailers);
 
-  const imdb = byImdb ? requestedId : details.external_ids?.imdb_id;
   const base = await (cinemeta || (IMDb.test(imdb) && fetchCinemeta(fetcher, type, imdb, signal)));
   const upstream = base?.meta?.type === type && base.meta.id === imdb ? base.meta : {};
+  const name = (series ? details?.name : details?.title) || upstream.name;
+  if (typeof name !== 'string' || !name.trim()) return null;
+
   const upstreamVideos = Array.isArray(upstream.videos) ? upstream.videos : undefined;
-  const videos = series && !upstreamVideos?.length
+  const videos = series && details && !upstreamVideos?.length
     ? await fallbackEpisodes(fetcher, details, tmdbId, IMDb.test(imdb) ? imdb : requestedId, key, signal)
     : upstreamVideos;
   if (series && !videos?.length) return null;
 
-  const links = Array.isArray(upstream.links) ? upstream.links.filter(link => !/^trailers?$/i.test(link?.category)) : undefined;
+  const links = Array.isArray(upstream.links) ? upstream.links.filter(link => !link?.trailers && !/^trailers?$/i.test(link?.category)) : undefined;
   return {
     ...upstream,
     id: requestedId,
     type,
     name,
     imdb_id: IMDb.test(imdb) ? imdb : undefined,
-    moviedb_id: tmdbId,
-    description: details.overview || upstream.description,
-    poster: image(details.poster_path, 'w500') || upstream.poster,
-    background: image(details.backdrop_path, 'w1280') || upstream.background,
-    genres: Array.isArray(details.genres) ? details.genres.map(genre => genre.name) : upstream.genres,
-    releaseInfo: (details.release_date || details.first_air_date)?.slice(0, 4) || upstream.releaseInfo,
+    moviedb_id: hasTmdbId ? tmdbId : upstream.moviedb_id,
+    description: details?.overview || upstream.description,
+    poster: image(details?.poster_path, 'w500') || upstream.poster,
+    background: image(details?.backdrop_path, 'w1280') || upstream.background,
+    genres: Array.isArray(details?.genres) ? details.genres.map(genre => genre.name) : upstream.genres,
+    releaseInfo: (details?.release_date || details?.first_air_date)?.slice(0, 4) || upstream.releaseInfo,
     videos,
     links,
     trailers,
-    trailerStreams: trailers.map(trailer => ({ ytId: trailer.key }))
+    trailerStreams: trailers.map(trailer => ({ ytId: trailer.key, title: trailer.name }))
   };
 }

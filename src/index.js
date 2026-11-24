@@ -8,7 +8,7 @@ const SUCCESS_TTL = 15 * 60_000;
 const EMPTY_TTL = 60_000;
 const MANIFEST = {
   id: 'io.trailerio.lite',
-  version: '1.3.0',
+  version: '1.4.0',
   name: 'Trailerio VF',
   description: 'Bandes-annonces en français pour les films et séries dans Fusion.',
   resources: [{ name: 'meta', types: TYPES, idPrefixes: ['tt'] }],
@@ -25,6 +25,16 @@ const NUVIO_MANIFEST = {
   idPrefixes: NUVIO_PREFIXES,
   resources: [{ name: 'meta', types: TYPES, idPrefixes: NUVIO_PREFIXES }]
 };
+const MANIFESTS = new Map([
+  ['/manifest.json', MANIFEST],
+  ['/nuvio/manifest.json', NUVIO_MANIFEST],
+  ['/nuvio-strict/manifest.json', {
+    ...NUVIO_MANIFEST,
+    id: 'io.trailerio.nuvio.strict',
+    name: 'Trailerio VF strict pour Nuvio',
+    description: 'Fiches Nuvio avec les bandes-annonces YouTube confirmées en VF.'
+  }]
+]);
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -73,25 +83,27 @@ export function createAddon({ fetcher = (...args) => fetch(...args), coalesce = 
     }
 
     if (url.pathname === '/health') return json({ status: 'ok' });
-    if (url.pathname === '/manifest.json' || url.pathname === '/nuvio/manifest.json') {
+    const manifest = MANIFESTS.get(url.pathname);
+    if (manifest) {
       const logo = icon
         ? new URL('/icon.png', url).href
         : 'https://raw.githubusercontent.com/Wallacecleaver/trailerio-vf/main/icon.png';
-      const manifest = url.pathname === '/manifest.json' ? MANIFEST : NUVIO_MANIFEST;
       return json({ ...manifest, logo });
     }
     if (url.pathname === '/icon.png' && icon) {
       return new Response(icon, { headers: { ...CORS, 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' } });
     }
 
-    const nuvio = url.pathname.match(/^\/nuvio\/meta\/(movie|series)\/(tt\d{7,12}|tmdb(?::|%3[aA])\d{1,10})(?:(?::|%3[aA])\d+){0,2}\.json$/);
+    const nuvio = url.pathname.match(/^\/(nuvio(?:-strict)?)\/meta\/(movie|series)\/(tt\d{7,12}|tmdb(?::|%3[aA])\d{1,10})(?:(?::|%3[aA])\d+){0,2}\.json$/);
     if (nuvio) {
       const startedAt = performance.now();
-      const [, type, encodedId] = nuvio;
+      const [, variant, type, encodedId] = nuvio;
       const id = encodedId.replace(/%3a/gi, ':');
-      const { result, cache } = await getCached(`nuvio:${type}:${id}`, () => findNuvioMeta(fetcher, id, type, tmdbApiKey), Boolean);
+      const { result, cache } = await getCached(`${variant}:${type}:${id}`,
+        () => findNuvioMeta(fetcher, id, type, tmdbApiKey, { allowEmptyTrailers: variant === 'nuvio-strict' }),
+        meta => meta?.trailers.length > 0);
       if (request.method === 'GET') {
-        onLookup?.({ id, type, title: result?.name || id, providers: result ? ['YouTube · VF'] : [], durationMs: Math.round(performance.now() - startedAt) });
+        onLookup?.({ id, type, title: result?.name || id, providers: result?.trailers.length ? ['YouTube · VF'] : [], durationMs: Math.round(performance.now() - startedAt) });
       }
       return json({ meta: result }, 200, { 'X-Trailerio-Cache': cache });
     }

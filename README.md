@@ -44,7 +44,13 @@ Dans **Enrichissement TMDB**, désactive l’option de remplacement des bandes-a
 
 Cette version transmet les bandes-annonces et teasers YouTube explicitement identifiés en VF, ainsi que les vidéos officielles françaises des titres tournés en français. Elle conserve les épisodes des séries à partir de Cinemeta ou de TMDB. Quand aucune vidéo VF compatible n’est disponible, Nuvio peut reprendre la fiche d’un autre fournisseur.
 
-Après redéploiement, teste Oppenheimer (`tt15398776`) ou Lupin (`tt2531336`). Une recherche Nuvio qui trouve une vidéo VF affiche **YouTube · VF** dans le journal du tableau de bord.
+Après redéploiement, teste Comment braquer une banque (`tt35866986`), Oppenheimer (`tt15398776`) ou Lupin (`tt2531336`). Une recherche Nuvio qui trouve une vidéo VF affiche **YouTube · VF** dans le journal du tableau de bord.
+
+### Mode VF strict et AIOMetadata
+
+Pour laisser les bandes-annonces vides quand aucune VF n’est confirmée, ajoute `https://trailers.example.com/nuvio-strict/manifest.json` directement dans **Nuvio → Addons** et place **Trailerio VF strict pour Nuvio** en première position parmi les addons de métadonnées. Le mode strict renvoie alors une fiche avec une liste de bandes-annonces vide, dès qu’il peut récupérer la fiche du titre.
+
+Dans AIOMetadata, tu peux mettre ce même manifeste dans **Meta Providers → Trailers → A trailer addon**. Changer l’URL crée une nouvelle entrée de cache pour les bandes-annonces. Lorsque Trailerio ne trouve aucune VF confirmée, AIOMetadata reprend les bandes-annonces de son fournisseur habituel. Pour laisser la liste vide dans ce cas, configure le mode strict directement dans Nuvio.
 
 ### Variables d’environnement
 
@@ -77,7 +83,7 @@ Ouvre `https://trailers.example.com/dashboard/` et connecte-toi avec l’identif
 
 ### Tester après un redéploiement
 
-1. Ouvre la page d’accueil. L’indicateur doit afficher **En ligne**. **Voir le manifeste** doit afficher le JSON version `1.3.0`.
+1. Ouvre la page d’accueil. L’indicateur doit afficher **En ligne**. **Voir le manifeste** doit afficher le JSON version `1.4.0`.
 2. Dans le tableau de bord, ouvre **Tester une recherche VF**. Choisis **Film** et saisis `tt15398776` pour Oppenheimer, ou **Série** et saisis `tt3581920` pour The Last of Us. Le résultat affiche les liens VF trouvés et le temps de réponse. **Voir le JSON** affiche la réponse utilisée par Fusion.
 3. Relance la même recherche. **En cache** indique que le résultat vient de la mémoire du serveur. Pour vérifier la lecture, lance une bande-annonce dans Fusion et écoute la piste audio. Les recherches que Fusion envoie à Trailerio apparaissent dans le journal.
 

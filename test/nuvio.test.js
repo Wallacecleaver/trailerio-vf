@@ -11,10 +11,13 @@ test('le manifeste Nuvio est distinct et annonce les identifiants IMDb et TMDB',
   const addon = createAddon();
   const fusion = await (await addon(new Request(`${base}/manifest.json`))).json();
   const nuvio = await (await addon(new Request(`${base}/nuvio/manifest.json`))).json();
+  const strict = await (await addon(new Request(`${base}/nuvio-strict/manifest.json`))).json();
   assert.equal(fusion.id, 'io.trailerio.lite');
   assert.deepEqual(fusion.idPrefixes, ['tt']);
   assert.equal(nuvio.id, 'io.trailerio.nuvio');
   assert.deepEqual(nuvio.resources, [{ name: 'meta', types: ['movie', 'series'], idPrefixes: ['tt', 'tmdb:'] }]);
+  assert.equal(strict.id, 'io.trailerio.nuvio.strict');
+  assert.deepEqual(strict.resources, nuvio.resources);
 });
 
 test('Nuvio reçoit des identifiants YouTube VF et conserve la fiche du film', async () => {
@@ -49,7 +52,7 @@ test('Nuvio reçoit des identifiants YouTube VF et conserve la fiche du film', a
   assert.deepEqual(meta.trailers.map(({ site, key, source }) => ({ site, key, source })), [
     { site: 'YouTube', key: 'videoVF1234', source: 'videoVF1234' }
   ]);
-  assert.deepEqual(meta.trailerStreams, [{ ytId: 'videoVF1234' }]);
+  assert.deepEqual(meta.trailerStreams, [{ ytId: 'videoVF1234', title: 'Bande-annonce [VF]' }]);
   assert.equal(response.headers.get('x-trailerio-cache'), 'MISS');
   assert.equal((await addon(request)).headers.get('x-trailerio-cache'), 'HIT');
 });
@@ -110,4 +113,62 @@ test('une VO sous-titrée seule laisse Nuvio passer au fournisseur de fiches sui
   } });
   const response = await addon(new Request(`${base}/nuvio/meta/movie/tt1234567.json`));
   assert.deepEqual(await response.json(), { meta: null });
+});
+
+test('le mode strict présente la fiche et élimine les bandes-annonces héritées quand aucune VF ne convient', async () => {
+  const entries = [];
+  const addon = createAddon({ onLookup: item => entries.push(item), fetcher: async input => {
+    const url = new URL(input);
+    if (url.hostname === 'v3-cinemeta.strem.io') return Response.json({ meta: {
+      id: 'tt1234567', type: 'movie', name: 'Fiche du film',
+      trailers: [{ source: 'videoVO1234', name: 'VO' }], trailerStreams: [{ ytId: 'videoVO1234' }],
+      links: [
+        { category: 'cast', name: 'Acteur', url: 'https://example.test/actor' },
+        { category: 'Trailer', url: 'https://example.test/vo' },
+        { trailers: 'https://example.test/vo.mp4', provider: 'Autre' }
+      ]
+    } });
+    if (url.pathname.startsWith('/3/find/')) return Response.json({ movie_results: [{ id: 42 }] });
+    return Response.json({ title: 'Fiche du film', original_language: 'en', videos: { results: [frenchTrailer('videoVO1234', 'Bande-annonce VOSTFR')] } });
+  } });
+  const normal = await addon(new Request(`${base}/nuvio/meta/movie/tt1234567.json`));
+  assert.deepEqual(await normal.json(), { meta: null });
+  const response = await addon(new Request(`${base}/nuvio-strict/meta/movie/tt1234567.json`));
+  const { meta } = await response.json();
+  assert.equal(meta.name, 'Fiche du film');
+  assert.deepEqual(meta.trailers, []);
+  assert.deepEqual(meta.trailerStreams, []);
+  assert.deepEqual(meta.links, [{ category: 'cast', name: 'Acteur', url: 'https://example.test/actor' }]);
+  assert.deepEqual(entries.map(item => item.providers), [[], []]);
+});
+
+test('le mode strict conserve les épisodes Cinemeta pendant un échec TMDB', async () => {
+  const episode = { id: 'tt1234567:1:1', title: 'Épisode 1', season: 1, episode: 1 };
+  const addon = createAddon({ fetcher: async input => new URL(input).hostname === 'v3-cinemeta.strem.io'
+    ? Response.json({ meta: { id: 'tt1234567', type: 'series', name: 'Série', videos: [episode], trailers: [{ source: 'videoVO1234' }] } })
+    : new Response(null, { status: 503 }) });
+  const response = await addon(new Request(`${base}/nuvio-strict/meta/series/tt1234567.json`));
+  const { meta } = await response.json();
+  assert.deepEqual(meta.videos, [episode]);
+  assert.deepEqual(meta.trailers, []);
+});
+
+test('la bande-annonce vérifiée de Comment braquer une banque est lisible par AIOMetadata', async () => {
+  const addon = createAddon({ fetcher: async input => {
+    const url = new URL(input);
+    if (url.hostname === 'v3-cinemeta.strem.io') return Response.json({ meta: {
+      id: 'tt35866986', type: 'movie', name: 'Comment braquer une banque'
+    } });
+    if (url.pathname.startsWith('/3/find/')) return Response.json({ movie_results: [{ id: 1437511 }] });
+    return Response.json({ title: 'Comment braquer une banque', original_language: 'en', videos: { results: [
+      frenchTrailer('gQ-sXBwGZZs', 'Bande-annonce officielle VOSTFR'),
+      frenchTrailer('yrKif2zi3qQ', 'Bande-annonce officielle')
+    ] } });
+  } });
+  for (const variant of ['nuvio', 'nuvio-strict']) {
+    const response = await addon(new Request(`${base}/${variant}/meta/movie/tt35866986.json`));
+    const { meta } = await response.json();
+    assert.deepEqual(meta.trailers.map(item => item.source), ['uXFBBDDvCzk']);
+    assert.deepEqual(meta.trailerStreams, [{ ytId: 'uXFBBDDvCzk', title: 'Comment braquer une banque · Bande-annonce VF' }]);
+  }
 });
