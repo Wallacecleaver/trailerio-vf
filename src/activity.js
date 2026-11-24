@@ -1,5 +1,6 @@
 const SOURCE_NAMES = {
   'api.themoviedb.org': 'TMDB',
+  'v3-cinemeta.strem.io': 'Cinemeta',
   'www.wikidata.org': 'Wikidata',
   'www.allocine.fr': 'AlloCiné',
   'tv.apple.com': 'Apple TV',

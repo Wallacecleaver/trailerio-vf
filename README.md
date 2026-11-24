@@ -36,6 +36,16 @@ trailers.example.com {
 
 Utilise la même adresse HTTPS pour `PUBLIC_URL`. Elle sert à construire les liens de lecture HLS sur le VPS. La page d’accueil de l’addon permet de copier le lien du manifeste. Colle-le dans **Fusion → Addons**.
 
+## Installer dans Nuvio Mobile
+
+Ajoute `https://trailers.example.com/nuvio/manifest.json` dans **Nuvio → Addons**, puis place **Trailerio VF pour Nuvio** au-dessus de tes autres addons de métadonnées. Nuvio utilise le premier addon qui fournit une fiche pour le titre.
+
+Dans **Enrichissement TMDB**, désactive l’option de remplacement des bandes-annonces pour que Nuvio lise celles de l’addon. Garde la section **Bandes-annonces** activée dans la fiche du titre.
+
+Cette version transmet les bandes-annonces et teasers YouTube explicitement identifiés en VF, ainsi que les vidéos officielles françaises des titres tournés en français. Elle conserve les épisodes des séries à partir de Cinemeta ou de TMDB. Quand aucune vidéo VF compatible n’est disponible, Nuvio peut reprendre la fiche d’un autre fournisseur.
+
+Après redéploiement, teste Oppenheimer (`tt15398776`) ou Lupin (`tt2531336`). Une recherche Nuvio qui trouve une vidéo VF affiche **YouTube · VF** dans le journal du tableau de bord.
+
 ### Variables d’environnement
 
 | Variable | Valeur par défaut | Rôle |
@@ -67,7 +77,7 @@ Ouvre `https://trailers.example.com/dashboard/` et connecte-toi avec l’identif
 
 ### Tester après un redéploiement
 
-1. Ouvre la page d’accueil. L’indicateur doit afficher **En ligne**. **Voir le manifeste** doit afficher le JSON version `1.2.0`.
+1. Ouvre la page d’accueil. L’indicateur doit afficher **En ligne**. **Voir le manifeste** doit afficher le JSON version `1.3.0`.
 2. Dans le tableau de bord, ouvre **Tester une recherche VF**. Choisis **Film** et saisis `tt15398776` pour Oppenheimer, ou **Série** et saisis `tt3581920` pour The Last of Us. Le résultat affiche les liens VF trouvés et le temps de réponse. **Voir le JSON** affiche la réponse utilisée par Fusion.
 3. Relance la même recherche. **En cache** indique que le résultat vient de la mémoire du serveur. Pour vérifier la lecture, lance une bande-annonce dans Fusion et écoute la piste audio. Les recherches que Fusion envoie à Trailerio apparaissent dans le journal.
 

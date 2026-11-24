@@ -1,4 +1,5 @@
 import { findTrailers } from './providers.js';
+import { findNuvioMeta } from './nuvio.js';
 
 const TMDB_API_KEY = 'bfe73358661a995b992ae9a812aa0d2f';
 const TYPES = ['movie', 'series'];
@@ -7,13 +8,22 @@ const SUCCESS_TTL = 15 * 60_000;
 const EMPTY_TTL = 60_000;
 const MANIFEST = {
   id: 'io.trailerio.lite',
-  version: '1.2.0',
+  version: '1.3.0',
   name: 'Trailerio VF',
   description: 'Bandes-annonces en français pour les films et séries dans Fusion.',
   resources: [{ name: 'meta', types: TYPES, idPrefixes: ['tt'] }],
   types: TYPES,
   idPrefixes: ['tt'],
   catalogs: []
+};
+const NUVIO_PREFIXES = ['tt', 'tmdb:'];
+const NUVIO_MANIFEST = {
+  ...MANIFEST,
+  id: 'io.trailerio.nuvio',
+  name: 'Trailerio VF pour Nuvio',
+  description: 'Bandes-annonces et teasers YouTube en français pour Nuvio.',
+  idPrefixes: NUVIO_PREFIXES,
+  resources: [{ name: 'meta', types: TYPES, idPrefixes: NUVIO_PREFIXES }]
 };
 
 const CORS = {
@@ -30,14 +40,13 @@ export function createAddon({ fetcher = (...args) => fetch(...args), coalesce = 
   const cache = new Map();
   const pending = new Map();
 
-  async function getTrailers(imdbId, type, tmdbApiKey) {
-    const key = `${type}:${imdbId}`;
+  async function getCached(key, resolve, hasResults) {
     const cached = cache.get(key);
     if (cached?.expiresAt > Date.now()) return { result: cached.result, cache: 'HIT' };
     if (pending.has(key)) return { result: await pending.get(key), cache: 'SHARED' };
 
-    const lookup = findTrailers(fetcher, imdbId, type, tmdbApiKey).then(result => {
-      const ttl = result.apple || result.allocine.length ? SUCCESS_TTL : EMPTY_TTL;
+    const lookup = resolve().then(result => {
+      const ttl = hasResults(result) ? SUCCESS_TTL : EMPTY_TTL;
       cache.delete(key);
       cache.set(key, { result, expiresAt: Date.now() + ttl });
       if (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value);
@@ -52,6 +61,10 @@ export function createAddon({ fetcher = (...args) => fetch(...args), coalesce = 
     }
   }
 
+  function getTrailers(imdbId, type, tmdbApiKey) {
+    return getCached(`fusion:${type}:${imdbId}`, () => findTrailers(fetcher, imdbId, type, tmdbApiKey), result => result.apple || result.allocine.length);
+  }
+
   return async function handleRequest(request, { tmdbApiKey = TMDB_API_KEY, icon } = {}) {
     const url = new URL(request.url);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
@@ -60,14 +73,27 @@ export function createAddon({ fetcher = (...args) => fetch(...args), coalesce = 
     }
 
     if (url.pathname === '/health') return json({ status: 'ok' });
-    if (url.pathname === '/manifest.json') {
+    if (url.pathname === '/manifest.json' || url.pathname === '/nuvio/manifest.json') {
       const logo = icon
         ? new URL('/icon.png', url).href
         : 'https://raw.githubusercontent.com/Wallacecleaver/trailerio-vf/main/icon.png';
-      return json({ ...MANIFEST, logo });
+      const manifest = url.pathname === '/manifest.json' ? MANIFEST : NUVIO_MANIFEST;
+      return json({ ...manifest, logo });
     }
     if (url.pathname === '/icon.png' && icon) {
       return new Response(icon, { headers: { ...CORS, 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' } });
+    }
+
+    const nuvio = url.pathname.match(/^\/nuvio\/meta\/(movie|series)\/(tt\d{7,12}|tmdb(?::|%3[aA])\d{1,10})(?:(?::|%3[aA])\d+){0,2}\.json$/);
+    if (nuvio) {
+      const startedAt = performance.now();
+      const [, type, encodedId] = nuvio;
+      const id = encodedId.replace(/%3a/gi, ':');
+      const { result, cache } = await getCached(`nuvio:${type}:${id}`, () => findNuvioMeta(fetcher, id, type, tmdbApiKey), Boolean);
+      if (request.method === 'GET') {
+        onLookup?.({ id, type, title: result?.name || id, providers: result ? ['YouTube · VF'] : [], durationMs: Math.round(performance.now() - startedAt) });
+      }
+      return json({ meta: result }, 200, { 'X-Trailerio-Cache': cache });
     }
 
     const meta = url.pathname.match(/^\/meta\/(movie|series)\/(tt\d{7,12})(?:(?::|%3[aA])\d+){0,2}\.json$/);

@@ -9,9 +9,9 @@ const WIKIDATA_ID = /^Q[1-9]\d*$/;
 const WIKIDATA_HEADERS = { 'User-Agent': 'Trailerio-VF/1.2 (https://github.com/Wallacecleaver/trailerio-vf)' };
 const TIMEOUT_MS = 4500;
 
-async function read(fetcher, url, format, options = {}) {
+export async function read(fetcher, url, format, { signal = AbortSignal.timeout(TIMEOUT_MS), ...options } = {}) {
   try {
-    const response = await fetcher(url, { ...options, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    const response = await fetcher(url, { ...options, signal });
     if (!response.ok) return null;
     return await response[format]();
   } catch {
@@ -25,17 +25,25 @@ function tmdbUrl(path, key, params = {}) {
   return url;
 }
 
-async function findMetadata(fetcher, imdbId, type, key) {
-  const lookup = await read(fetcher, tmdbUrl(`find/${imdbId}`, key, {
+export function readTmdb(fetcher, path, key, params, signal) {
+  return read(fetcher, tmdbUrl(path, key, params), 'json', { signal, redirect: 'error' });
+}
+
+export async function findTmdbTitle(fetcher, imdbId, type, key, signal) {
+  const lookup = await readTmdb(fetcher, `find/${imdbId}`, key, {
     external_source: 'imdb_id',
     language: 'fr-FR'
-  }), 'json', { redirect: 'error' });
+  }, signal);
+  return (type === 'series' ? lookup?.tv_results : lookup?.movie_results)?.[0];
+}
+
+async function findMetadata(fetcher, imdbId, type, key) {
   const series = type === 'series';
-  const result = (series ? lookup?.tv_results : lookup?.movie_results)?.[0];
+  const result = await findTmdbTitle(fetcher, imdbId, type, key);
   if (!Number.isSafeInteger(result?.id)) return {};
 
   const media = series ? 'tv' : 'movie';
-  const ids = await read(fetcher, tmdbUrl(`${media}/${result.id}/external_ids`, key), 'json', { redirect: 'error' });
+  const ids = await readTmdb(fetcher, `${media}/${result.id}/external_ids`, key);
   return { title: series ? result.name : result.title, wikidataId: ids?.wikidata_id };
 }
 
