@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Trailerio VF · Bandes-annonces pour Fusion</title>
+    <link rel="icon" href="/icon.png" type="image/png">
+    <link rel="stylesheet" href="/site/style.css">
+    <script type="module" src="/site/app.js"></script>
+  </head>
+  <body>
+    <header class="wrap bar">
+      <div class="brand"><img src="/icon.png" width="38" height="38" alt=""> Trailerio VF</div>
+      <!-- dashboard -->
+    </header>
+    <main class="wrap">
+      <section class="intro">
+        <h1>Les bandes-annonces en&nbsp;VF</h1>
+        <p>Retrouve des bandes-annonces en français pour tes films et séries dans Fusion.</p>
+      </section>
+      <section class="install" aria-labelledby="install-title">
+        <div class="install-heading">
+          <h2 id="install-title">Installer dans Fusion</h2>
+          <span id="service" class="service" role="status">Vérification…</span>
+        </div>
+        <p>Copie l’adresse du manifeste et colle-la dans <strong>Fusion → Addons</strong>.</p>
+        <div class="address">
+          <label class="sr-only" for="manifest-address">Adresse du manifeste</label>
+          <input id="manifest-address" type="text" readonly value="/manifest.json">
+          <button id="copy" type="button">Copier l’adresse</button>
+        </div>
+        <div class="actions"><a id="manifest" href="/manifest.json">Voir le manifeste</a><span id="copy-status" role="status"></span></div>
+      </section>
+    </main>
+  </body>
+</html>

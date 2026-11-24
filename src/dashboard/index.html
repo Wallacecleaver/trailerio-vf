@@ -32,6 +32,23 @@
         <div class="metric"><dt>Erreurs</dt><dd id="errors" class="danger">–</dd></div>
       </dl>
 
+      <section class="tester" aria-labelledby="test-title">
+        <h2 id="test-title">Tester une recherche VF</h2>
+        <form id="test-form" class="test-form">
+          <label class="test-field" for="test-id">
+            Identifiant ou lien IMDb
+            <input id="test-id" type="text" placeholder="tt15398776" autocomplete="off" autocapitalize="none" spellcheck="false" required>
+          </label>
+          <label class="test-field" for="test-type">
+            Type
+            <span class="filter"><select id="test-type"><option value="movie">Film</option><option value="series">Série</option></select></span>
+          </label>
+          <button id="test-submit" class="primary" type="submit">Tester</button>
+        </form>
+        <p id="test-result" class="test-result" role="status" hidden></p>
+        <ul id="test-links" class="test-links" hidden></ul>
+      </section>
+
       <section class="journal" aria-labelledby="journal-title">
         <div class="journal-heading">
           <div>

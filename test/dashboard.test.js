@@ -3,6 +3,7 @@ import test from 'node:test';
 import { createActivity, monitorFetch } from '../src/activity.js';
 import { createDashboard } from '../src/dashboard.js';
 import { createAddon } from '../src/index.js';
+import { createSite } from '../src/site.js';
 
 const auth = value => `Basic ${Buffer.from(value).toString('base64')}`;
 
@@ -46,10 +47,27 @@ test('les statistiques continuent au-delà de la taille maximale du journal', ()
   assert.equal(emitted.length, 3);
 });
 
+test('la page d’installation peut être ouverte sans accès au tableau de bord', async () => {
+  const site = await createSite();
+  const home = site('/', 'GET');
+  assert.equal(home.status, 200);
+  const html = await home.text();
+  assert.match(html, /Installer dans Fusion/);
+  assert.doesNotMatch(html, /href="\/dashboard\/"/);
+  const enabled = await createSite(true);
+  assert.match(await enabled('/', 'GET').text(), /href="\/dashboard\/"/);
+  assert.match(site('/site/app.js', 'GET').headers.get('content-type'), /javascript/);
+  assert.equal(site('/dashboard/api', 'GET'), null);
+  assert.equal(site('/', 'POST'), null);
+});
+
 test('une recherche reste disponible si une source échoue et les logs masquent ses données sensibles', async () => {
   const emitted = [];
   const activity = createActivity({ write: event => emitted.push(event) });
-  const fetcher = monitorFetch(activity, async () => { throw new Error('https://api.themoviedb.org?api_key=secret-test'); });
+  const fetcher = monitorFetch(activity, async input => {
+    if (new URL(input).hostname === 'www.wikidata.org') return Response.json({ query: { search: [] } });
+    throw new Error('https://api.themoviedb.org?api_key=secret-test');
+  });
   const addon = createAddon({ fetcher, onLookup: activity.lookup });
   const request = new Request('http://example.test/meta/movie/tt1234567.json?private=secret-test');
   assert.deepEqual((await (await addon(request, { tmdbApiKey: 'secret-test' })).json()).meta.links, []);

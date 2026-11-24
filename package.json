@@ -1,6 +1,6 @@
 {
   "name": "trailerio-vf",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Bandes-annonces en français pour Fusion",
   "type": "module",
   "main": "src/index.js",

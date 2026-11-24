@@ -1,18 +1,12 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { loadAssets, PAGE_HEADERS, serveAsset } from './web-assets.js';
 
 const ASSETS = {
   '/dashboard': ['index.html', 'text/html; charset=utf-8'],
   '/dashboard/style.css': ['style.css', 'text/css; charset=utf-8'],
   '/dashboard/app.js': ['app.js', 'text/javascript; charset=utf-8']
 };
-const HEADERS = {
-  'Cache-Control': 'no-store',
-  'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
-  'X-Content-Type-Options': 'nosniff',
-  'Referrer-Policy': 'no-referrer',
-  'X-Robots-Tag': 'noindex'
-};
+const HEADERS = { ...PAGE_HEADERS, 'X-Robots-Tag': 'noindex' };
 
 const digest = value => createHash('sha256').update(value).digest();
 
@@ -23,10 +17,7 @@ function authenticated(authorization, expected) {
 
 export async function createDashboard(password, activity) {
   const expected = password ? digest(`admin:${password}`) : null;
-  const assets = expected ? new Map(await Promise.all(Object.entries(ASSETS).map(async ([route, [file, contentType]]) => {
-    const body = await readFile(new URL(`./dashboard/${file}`, import.meta.url));
-    return [route, { body, contentType }];
-  }))) : new Map();
+  const assets = expected ? await loadAssets(new URL('./dashboard/', import.meta.url), ASSETS) : new Map();
 
   return (pathname, method, authorization) => {
     if (pathname !== '/dashboard' && !pathname.startsWith('/dashboard/')) return null;
@@ -45,6 +36,6 @@ export async function createDashboard(password, activity) {
 
     const asset = assets.get(pathname === '/dashboard/' ? '/dashboard' : pathname);
     if (!asset) return new Response('Ressource introuvable', { status: 404, headers: HEADERS });
-    return new Response(asset.body, { headers: { ...HEADERS, 'Content-Type': asset.contentType } });
+    return serveAsset(asset, HEADERS);
   };
 }

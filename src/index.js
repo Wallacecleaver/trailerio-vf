@@ -7,7 +7,7 @@ const SUCCESS_TTL = 15 * 60_000;
 const EMPTY_TTL = 60_000;
 const MANIFEST = {
   id: 'io.trailerio.lite',
-  version: '1.1.0',
+  version: '1.2.0',
   name: 'Trailerio VF',
   description: 'Bandes-annonces en français pour les films et séries dans Fusion.',
   resources: [{ name: 'meta', types: TYPES, idPrefixes: ['tt'] }],
@@ -33,8 +33,8 @@ export function createAddon({ fetcher = (...args) => fetch(...args), coalesce = 
   async function getTrailers(imdbId, type, tmdbApiKey) {
     const key = `${type}:${imdbId}`;
     const cached = cache.get(key);
-    if (cached?.expiresAt > Date.now()) return cached.result;
-    if (pending.has(key)) return pending.get(key);
+    if (cached?.expiresAt > Date.now()) return { result: cached.result, cache: 'HIT' };
+    if (pending.has(key)) return { result: await pending.get(key), cache: 'SHARED' };
 
     const lookup = findTrailers(fetcher, imdbId, type, tmdbApiKey).then(result => {
       const ttl = result.apple || result.allocine.length ? SUCCESS_TTL : EMPTY_TTL;
@@ -46,7 +46,7 @@ export function createAddon({ fetcher = (...args) => fetch(...args), coalesce = 
     if (coalesce) pending.set(key, lookup);
 
     try {
-      return await lookup;
+      return { result: await lookup, cache: 'MISS' };
     } finally {
       pending.delete(key);
     }
@@ -70,11 +70,11 @@ export function createAddon({ fetcher = (...args) => fetch(...args), coalesce = 
       return new Response(icon, { headers: { ...CORS, 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' } });
     }
 
-    const meta = url.pathname.match(/^\/meta\/(movie|series)\/(tt\d{7,12})(?::\d+){0,2}\.json$/);
+    const meta = url.pathname.match(/^\/meta\/(movie|series)\/(tt\d{7,12})(?:(?::|%3[aA])\d+){0,2}\.json$/);
     if (meta) {
       const startedAt = performance.now();
       const [, type, id] = meta;
-      const { title, allocine, apple } = await getTrailers(id, type, tmdbApiKey);
+      const { result: { title, allocine, apple }, cache } = await getTrailers(id, type, tmdbApiKey);
       const links = allocine.map(trailers => ({ trailers, provider: 'AlloCiné · VF' }));
       if (apple) {
         const trailers = new URL(`/bande-annonce/${type}/${id}.m3u8`, url).href;
@@ -83,13 +83,13 @@ export function createAddon({ fetcher = (...args) => fetch(...args), coalesce = 
       if (request.method === 'GET') {
         onLookup?.({ id, type, title, providers: [...new Set(links.map(link => link.provider))], durationMs: Math.round(performance.now() - startedAt) });
       }
-      return json({ meta: { id, type, name: title, links } });
+      return json({ meta: { id, type, name: title, links } }, 200, { 'X-Trailerio-Cache': cache });
     }
 
     const trailer = url.pathname.match(/^\/bande-annonce\/(movie|series)\/(tt\d{7,12})\.m3u8$/);
     if (trailer) {
       const [, type, id] = trailer;
-      const { apple } = await getTrailers(id, type, tmdbApiKey);
+      const { result: { apple } } = await getTrailers(id, type, tmdbApiKey);
       if (apple) {
         return new Response(apple, {
           headers: { ...CORS, 'Content-Type': 'application/vnd.apple.mpegurl', 'Cache-Control': 'public, max-age=300' }

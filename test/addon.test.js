@@ -63,6 +63,7 @@ test('Fusion reçoit des liens directs VF, y compris une playlist Apple TV filtr
   const base = 'https://trailers.example.com';
   const config = { tmdbApiKey: 'clé de test' };
   const meta = await addon(new Request(`${base}/meta/movie/tt1234567.json`), config);
+  assert.equal(meta.headers.get('x-trailerio-cache'), 'MISS');
   const appleLink = `${base}/bande-annonce/movie/tt1234567.m3u8`;
   assert.deepEqual(await meta.json(), { meta: {
     id: 'tt1234567', type: 'movie', name: 'Titre français', links: [
@@ -76,20 +77,59 @@ test('Fusion reçoit des liens directs VF, y compris une playlist Apple TV filtr
   assert.equal(hls.headers.get('content-type'), 'application/vnd.apple.mpegurl');
   assert.match(await hls.text(), /LANGUAGE="fr-FR"/);
   assert.equal(seen.length, requestCount);
+  const repeated = await addon(new Request(`${base}/meta/movie/tt1234567.json`), config);
+  assert.equal(repeated.headers.get('x-trailerio-cache'), 'HIT');
+  assert.equal(seen.length, requestCount);
 });
 
 test('Une série sans source VF renvoie une liste vide et garde son titre localisé', async () => {
   const addon = createAddon({ fetcher: async input => {
-    const { pathname } = new URL(input);
+    const { pathname, searchParams } = new URL(input);
     if (pathname === '/3/find/tt1234567') return Response.json({ tv_results: [{ id: 12, name: 'Série française' }] });
     if (pathname === '/3/tv/12/external_ids') return Response.json({ wikidata_id: null });
+    if (searchParams.get('srsearch') === 'haswbstatement:P345=tt1234567') return Response.json({ query: { search: [] } });
     assert.fail(`URL inattendue ${pathname}`);
   } });
   const base = 'https://trailers.example.com';
-  const response = await addon(new Request(`${base}/meta/series/tt1234567:1:2.json`));
+  const response = await addon(new Request(`${base}/meta/series/tt1234567%3a1%3A2.json`));
+  assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     meta: { id: 'tt1234567', type: 'series', name: 'Série française', links: [] }
   });
   const missing = await addon(new Request(`${base}/bande-annonce/series/tt1234567.m3u8`));
   assert.equal(missing.status, 404);
+});
+
+test('Wikidata retrouve les sources VF avec un IMDb exact quand TMDB ne répond pas', async () => {
+  const visited = [];
+  const claim = (value, rank = 'normal') => ({ rank, mainsnak: { datavalue: { value } } });
+  const addon = createAddon({ fetcher: async input => {
+    const url = new URL(input);
+    visited.push(url.pathname);
+    if (url.hostname === 'api.themoviedb.org') return new Response(null, { status: 503 });
+    if (url.searchParams.get('srsearch') === 'haswbstatement:P345=tt1234567') {
+      return Response.json({ query: { search: [{ title: 'Q1' }, { title: 'Q2' }] } });
+    }
+    if (url.searchParams.get('ids') === 'Q1|Q2') {
+      return Response.json({ entities: {
+        Q1: { claims: { P345: [claim('tt1234567', 'deprecated')], P1265: [claim('999')] } },
+        Q2: { labels: { fr: { value: 'Le titre français' } }, claims: {
+          P345: [claim('tt1234567')],
+          P1265: [claim('777', 'deprecated'), claim('888'), claim('66', 'preferred')]
+        } }
+      } });
+    }
+    if (url.pathname === '/videos/fichefilm-66/toutes/') {
+      return new Response('<a href="/video/player_gen_cmedia=1&amp;cfilm=66.html">Titre Bande-annonce VF</a>');
+    }
+    if (url.pathname === '/video/player_gen_cmedia=1&cfilm=66.html') {
+      return new Response(`<script type="application/ld+json">{"@type":"VideoObject","name":"Titre Bande-annonce VF","contentUrl":"${allocineMp4}"}</script>`);
+    }
+    assert.fail(`URL inattendue ${url.hostname}${url.pathname}`);
+  } });
+  const response = await addon(new Request('https://trailers.example.com/meta/movie/tt1234567.json'));
+  assert.deepEqual((await response.json()).meta, {
+    id: 'tt1234567', type: 'movie', name: 'Le titre français', links: [{ trailers: allocineMp4, provider: 'AlloCiné · VF' }]
+  });
+  assert.deepEqual(visited.filter(path => path.startsWith('/videos/')), ['/videos/fichefilm-66/toutes/']);
 });

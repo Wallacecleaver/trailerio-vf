@@ -31,8 +31,8 @@ h1, h2, p, dl, dd { margin: 0; }
 h1 { font-size: clamp(1.85rem, 5vw, 2.75rem); line-height: 1.1; letter-spacing: -0.05em; }
 h2 { font-size: 1.2rem; letter-spacing: -0.025em; }
 .muted { margin-top: 0.45rem; color: var(--muted); font-size: 0.875rem; line-height: 1.5; }
-button, select { font: inherit; }
-button, select {
+button, select, input { font: inherit; }
+button, select, input {
   min-height: 2.625rem;
   border: 1px solid var(--line);
   border-radius: 0.6rem;
@@ -42,16 +42,27 @@ button, select {
   font-weight: 580;
 }
 button { padding-inline: 0.9rem; cursor: pointer; }
-button:hover, select:hover { border-color: var(--accent); }
+button:hover, select:hover, input:hover { border-color: var(--accent); }
 button:disabled { opacity: 0.55; cursor: wait; }
-button:focus-visible, select:focus-visible, .table-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+button:focus-visible, select:focus-visible, input:focus-visible, a:focus-visible, .table-scroll:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.85rem; margin-block: 1.75rem 1.25rem; }
 .metric { padding: 1.05rem 1.15rem; border: 1px solid var(--line); border-radius: 0.85rem; background: var(--panel); }
 .metric dt { color: var(--muted); font-size: 0.875rem; }
 .metric dd { margin-top: 0.6rem; font-size: clamp(1.5rem, 4vw, 2.15rem); font-weight: 690; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.04em; overflow-wrap: anywhere; }
 
-.journal { overflow: hidden; border: 1px solid var(--line); border-radius: 0.85rem; background: var(--panel); }
+.journal, .tester { overflow: hidden; border: 1px solid var(--line); border-radius: 0.85rem; background: var(--panel); }
+.tester { padding: 1.2rem 1.3rem; margin-bottom: 1.25rem; }
+.test-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(7rem, auto) auto; align-items: end; gap: 0.75rem; margin-top: 0.85rem; }
+.test-field { display: grid; gap: 0.35rem; min-width: 0; color: var(--muted); font-size: 0.875rem; }
+.test-field input { padding-inline: 0.75rem; min-width: 0; color: #f1f3fb; }
+.test-field select { width: 100%; color: #f1f3fb; }
+.primary { color: #171331; background: var(--accent); border-color: transparent; }
+.primary:hover { background: #cfcdff; }
+.test-result { margin-top: 0.9rem; line-height: 1.5; font-size: 0.875rem; }
+.test-result[data-state='error'] { color: var(--red); }
+.test-links { display: flex; flex-wrap: wrap; gap: 0.45rem 1rem; margin: 0.65rem 0 0; padding: 0; list-style: none; }
+.test-links a { color: var(--accent); font-size: 0.875rem; text-underline-offset: 0.2em; }
 .journal-heading { padding: 1.2rem 1.3rem; }
 .filter { display: inline-flex; position: relative; }
 .filter::after { content: ''; border: solid var(--muted); border-width: 0 1.5px 1.5px 0; width: 0.4rem; height: 0.4rem; position: absolute; right: 0.9rem; top: 1rem; transform: rotate(45deg); pointer-events: none; }
@@ -76,4 +87,9 @@ td { overflow-wrap: anywhere; }
   main { padding-block: 1.9rem; }
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .metric { padding: 0.85rem; }
+}
+
+@media (max-width: 32rem) {
+  .test-form { grid-template-columns: minmax(0, 1fr) auto; }
+  .test-field:first-child { grid-column: span 2; }
 }

@@ -3,6 +3,10 @@ import { frenchApplePlaylist } from './apple-hls.js';
 const ALLOCINE_ORIGIN = 'https://www.allocine.fr';
 const APPLE_PREVIEW_HOSTS = new Set(['play.itunes.apple.com', 'play-edge.itunes.apple.com']);
 const FRENCH_TRAILER = /\b(?:bande[\s-]annonce|teaser)(?:\s*\(\d+\))?\s+(?:VF|VFF|VFQ)\s*$/i;
+const ALLOCINE_ID = /^\d+$/;
+const APPLE_ID = /^umc\.cmc\.[a-z0-9]+$/i;
+const WIKIDATA_ID = /^Q[1-9]\d*$/;
+const WIKIDATA_HEADERS = { 'User-Agent': 'Trailerio-VF/1.2 (https://github.com/Wallacecleaver/trailerio-vf)' };
 const TIMEOUT_MS = 4500;
 
 async function read(fetcher, url, format, options = {}) {
@@ -28,23 +32,59 @@ async function findMetadata(fetcher, imdbId, type, key) {
   }), 'json', { redirect: 'error' });
   const series = type === 'series';
   const result = (series ? lookup?.tv_results : lookup?.movie_results)?.[0];
-  if (!Number.isSafeInteger(result?.id)) return { title: imdbId };
+  if (!Number.isSafeInteger(result?.id)) return {};
 
   const media = series ? 'tv' : 'movie';
   const ids = await read(fetcher, tmdbUrl(`${media}/${result.id}/external_ids`, key), 'json', { redirect: 'error' });
-  return { title: (series ? result.name : result.title) || imdbId, wikidataId: ids?.wikidata_id };
+  return { title: series ? result.name : result.title, wikidataId: ids?.wikidata_id };
 }
 
-async function findProviderIds(fetcher, wikidataId, type) {
-  if (typeof wikidataId !== 'string' || !/^Q[1-9]\d*$/.test(wikidataId)) return {};
+function readWikidata(fetcher, params) {
+  const url = new URL('https://www.wikidata.org/w/api.php');
+  url.search = new URLSearchParams({ format: 'json', formatversion: '2', ...params });
+  return read(fetcher, url, 'json', { headers: WIKIDATA_HEADERS });
+}
 
-  const entity = await read(fetcher, `https://www.wikidata.org/wiki/Special:EntityData/${wikidataId}.json`, 'json', {
-    headers: { 'User-Agent': 'Trailerio-VF/1.1 (https://github.com/Wallacecleaver/trailerio-vf)' }
+async function findWikidataCandidates(fetcher, imdbId) {
+  const data = await readWikidata(fetcher, {
+    action: 'query', list: 'search', srsearch: `haswbstatement:P345=${imdbId}`, srnamespace: '0', srlimit: '4', srprop: ''
   });
-  const claims = entity?.entities?.[wikidataId]?.claims;
-  const value = property => claims?.[property]?.[0]?.mainsnak?.datavalue?.value;
+  const matches = data?.query?.search;
+  return Array.isArray(matches)
+    ? [...new Set(matches.map(item => item?.title).filter(id => typeof id === 'string' && WIKIDATA_ID.test(id)))].slice(0, 4)
+    : [];
+}
+
+function claimValues(entity, property) {
+  const claims = entity?.claims?.[property];
+  if (!Array.isArray(claims)) return [];
+
+  return claims
+    .filter(claim => claim && claim.rank !== 'deprecated')
+    .sort((left, right) => Number(right.rank === 'preferred') - Number(left.rank === 'preferred'))
+    .map(claim => claim.mainsnak?.datavalue?.value)
+    .filter(value => typeof value === 'string' && value.length > 0);
+}
+
+async function findProviderIds(fetcher, imdbId, wikidataId, type) {
+  const knownId = typeof wikidataId === 'string' && WIKIDATA_ID.test(wikidataId);
+  const ids = knownId ? [wikidataId] : await findWikidataCandidates(fetcher, imdbId);
+  if (!ids.length) return {};
+
+  const data = await readWikidata(fetcher, { action: 'wbgetentities', ids: ids.join('|'), props: 'claims|labels', languages: 'fr' });
   const series = type === 'series';
-  return { allocineId: value(series ? 'P1267' : 'P1265'), appleId: value(series ? 'P9751' : 'P9586') };
+  const candidates = [];
+  for (const id of ids) {
+    const entity = data?.entities?.[id];
+    if (!entity || (!knownId && !claimValues(entity, 'P345').includes(imdbId))) continue;
+
+    candidates.push({
+      title: entity.labels?.fr?.value,
+      allocineId: claimValues(entity, series ? 'P1267' : 'P1265').find(value => ALLOCINE_ID.test(value)),
+      appleId: claimValues(entity, series ? 'P9751' : 'P9586').find(value => APPLE_ID.test(value))
+    });
+  }
+  return candidates.find(candidate => candidate.allocineId || candidate.appleId) || candidates[0] || {};
 }
 
 function decodeHtml(value) {
@@ -81,7 +121,7 @@ function allocineMediaUrl(html) {
 }
 
 async function resolveAllocine(fetcher, id, type) {
-  if (typeof id !== 'string' || !/^\d+$/.test(id)) return [];
+  if (!id) return [];
 
   const listing = type === 'series' ? `/series/ficheserie-${id}/videos/` : `/videos/fichefilm-${id}/toutes/`;
   const html = await read(fetcher, new URL(listing, ALLOCINE_ORIGIN), 'text');
@@ -110,7 +150,7 @@ function applePreviewUrl(html) {
 }
 
 async function resolveApple(fetcher, id, type) {
-  if (typeof id !== 'string' || !/^umc\.cmc\.[a-z0-9]+$/i.test(id)) return null;
+  if (!id) return null;
 
   const path = type === 'series' ? 'show' : 'movie';
   const html = await read(fetcher, `https://tv.apple.com/fr/${path}/${id}`, 'text');
@@ -122,11 +162,11 @@ async function resolveApple(fetcher, id, type) {
 }
 
 export async function findTrailers(fetcher, imdbId, type, key) {
-  const { title, wikidataId } = await findMetadata(fetcher, imdbId, type, key);
-  const { allocineId, appleId } = await findProviderIds(fetcher, wikidataId, type);
+  const metadata = await findMetadata(fetcher, imdbId, type, key);
+  const { title, allocineId, appleId } = await findProviderIds(fetcher, imdbId, metadata.wikidataId, type);
   const [allocine, apple] = await Promise.all([
     resolveAllocine(fetcher, allocineId, type),
     resolveApple(fetcher, appleId, type)
   ]);
-  return { title, allocine, apple };
+  return { title: metadata.title || title || imdbId, allocine, apple };
 }

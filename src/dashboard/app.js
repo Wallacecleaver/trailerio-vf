@@ -79,3 +79,75 @@ filter.addEventListener('change', renderJournal);
 refreshButton.addEventListener('click', refresh);
 refresh();
 setInterval(() => { if (!document.hidden) refresh(); }, 5000);
+
+function imdbId(input) {
+  const value = input.trim();
+  if (/^tt\d{7,12}$/i.test(value)) return value.toLowerCase();
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || !['imdb.com', 'www.imdb.com', 'm.imdb.com'].includes(url.hostname)) return null;
+    return url.pathname.match(/^\/(?:[a-z]{2}\/)?title\/(tt\d{7,12})(?:\/|$)/i)?.[1].toLowerCase() || null;
+  } catch {
+    return null;
+  }
+}
+
+function resultLink(label, url) {
+  const item = document.createElement('li');
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.textContent = label;
+  anchor.target = '_blank';
+  anchor.rel = 'noopener noreferrer';
+  item.append(anchor);
+  return item;
+}
+
+byId('test-form').addEventListener('submit', async event => {
+  event.preventDefault();
+  const submit = byId('test-submit');
+  if (submit.disabled) return;
+  const id = imdbId(byId('test-id').value);
+  const result = byId('test-result');
+  const links = byId('test-links');
+  links.hidden = true;
+  result.hidden = false;
+  if (!id) {
+    result.dataset.state = 'error';
+    result.textContent = 'Saisis un identifiant IMDb de titre, par exemple tt15398776, ou un lien imdb.com/title/…';
+    return;
+  }
+
+  const type = byId('test-type').value;
+  const endpoint = `/meta/${type}/${id}.json`;
+  const start = performance.now();
+  submit.disabled = true;
+  result.dataset.state = 'loading';
+  result.textContent = 'Recherche VF en cours…';
+
+  try {
+    const response = await fetch(endpoint, { cache: 'no-store', signal: AbortSignal.timeout(30000) });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const { meta } = await response.json();
+    const count = meta.links.length;
+    const duration = number.format(Math.round(performance.now() - start));
+    const cached = response.headers.get('X-Trailerio-Cache') === 'HIT' ? ' · En cache' : '';
+    const outcome = count ? `${count} lien${count > 1 ? 's' : ''} VF` : 'Aucune VF trouvée';
+    result.dataset.state = 'done';
+    result.textContent = `${meta.name} · ${outcome} · ${duration} ms${cached}`;
+
+    const videos = meta.links.map(({ provider, trailers }, index) => {
+      const url = new URL(trailers);
+      if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+      return resultLink(`${provider} (${index + 1})`, url.href);
+    }).filter(Boolean);
+    links.replaceChildren(...videos, resultLink('Voir le JSON', endpoint));
+    links.hidden = false;
+    refresh();
+  } catch {
+    result.dataset.state = 'error';
+    result.textContent = 'La recherche n’a pas abouti. Consulte le journal ou réessaie.';
+  } finally {
+    submit.disabled = false;
+  }
+});
