@@ -1,5 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
+import { createActivity, monitorFetch } from './activity.js';
+import { createDashboard } from './dashboard.js';
 import { createAddon } from './index.js';
 
 const host = process.env.HOST || '127.0.0.1';
@@ -11,7 +13,9 @@ if (!['http:', 'https:'].includes(publicUrl.protocol) || publicUrl.pathname !== 
   throw new Error('PUBLIC_URL doit être une URL de base HTTP ou HTTPS.');
 }
 
-const addon = createAddon();
+const activity = createActivity();
+const addon = createAddon({ fetcher: monitorFetch(activity), onLookup: activity.lookup });
+const dashboard = await createDashboard(process.env.DASHBOARD_PASSWORD, activity);
 const icon = await readFile(new URL('../icon.png', import.meta.url));
 const tmdbApiKey = process.env.TMDB_API_KEY || undefined;
 
@@ -24,12 +28,13 @@ const server = createServer(async (incoming, outgoing) => {
       return;
     }
 
-    const response = await addon({ url: url.href, method: incoming.method }, { icon, tmdbApiKey });
+    const response = dashboard(url.pathname, incoming.method, incoming.headers.authorization)
+      || await addon({ url: url.href, method: incoming.method }, { icon, tmdbApiKey });
     const body = incoming.method === 'HEAD' ? undefined : Buffer.from(await response.arrayBuffer());
     outgoing.writeHead(response.status, Object.fromEntries(response.headers));
     outgoing.end(body);
   } catch {
-    console.error('Erreur pendant le traitement d’une requête.');
+    activity.error('Serveur', 'Erreur pendant le traitement d’une requête');
     outgoing.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8', 'Access-Control-Allow-Origin': '*' });
     outgoing.end(JSON.stringify({ error: 'Erreur interne' }));
   }

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>Activité · Trailerio VF</title>
+    <link rel="icon" href="/icon.png" type="image/png">
+    <link rel="stylesheet" href="/dashboard/style.css">
+    <script type="module" src="/dashboard/app.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="wrap topbar-inner">
+        <div class="brand"><img src="/icon.png" width="34" height="34" alt=""> Trailerio VF</div>
+        <span id="connection" class="connection" role="status">Connexion…</span>
+      </div>
+    </header>
+    <main class="wrap">
+      <div class="page-heading">
+        <div>
+          <h1>Activité de l’addon</h1>
+          <p id="started-at" class="muted">Depuis le démarrage du serveur</p>
+        </div>
+        <button id="refresh" type="button">Actualiser</button>
+      </div>
+
+      <dl class="stats" aria-label="Statistiques depuis le démarrage">
+        <div class="metric"><dt>Recherches</dt><dd id="searches">–</dd></div>
+        <div class="metric"><dt>Avec une VF</dt><dd id="with-vf" class="good">–</dd></div>
+        <div class="metric"><dt>Sans VF</dt><dd id="without-vf">–</dd></div>
+        <div class="metric"><dt>Erreurs</dt><dd id="errors" class="danger">–</dd></div>
+      </dl>
+
+      <section class="journal" aria-labelledby="journal-title">
+        <div class="journal-heading">
+          <div>
+            <h2 id="journal-title">Journal d’activité</h2>
+            <p id="updated-at" class="muted">Actualisation toutes les 5 secondes</p>
+          </div>
+          <label class="filter">
+            <span class="sr-only">Filtrer le journal</span>
+            <select id="filter">
+              <option value="all">Tous les événements</option>
+              <option value="vf">VF trouvée</option>
+              <option value="empty">Sans VF</option>
+              <option value="error">Erreurs</option>
+            </select>
+          </label>
+        </div>
+        <p id="empty" class="empty">Chargement du journal…</p>
+        <div id="table" class="table-scroll" tabindex="0" role="region" aria-label="Derniers événements" hidden>
+          <table>
+            <thead><tr><th scope="col">Heure</th><th scope="col">Résultat</th><th scope="col">Détail</th><th scope="col">Sources</th><th scope="col">Durée</th></tr></thead>
+            <tbody id="entries"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

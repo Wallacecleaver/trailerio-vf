@@ -55,6 +55,16 @@ curl https://trailers.example.com/meta/movie/tt15398776.json
 
 Pour lancer les tests du projet, utilise `npm test`.
 
+## Tableau de bord et logs
+
+Sur le VPS, ajoute `DASHBOARD_PASSWORD` aux variables d’environnement de l’addon (dans **Variables** sur WDock) et redéploie. Utilise un mot de passe long et unique.
+
+```env
+DASHBOARD_PASSWORD=ton-mot-de-passe
+```
+
+Ouvre `https://trailers.example.com/dashboard/` et connecte-toi avec l’identifiant `admin` et ce mot de passe. Le tableau de bord affiche les recherches, les bandes-annonces trouvées en VF et les erreurs de connexion aux sources. Il se rafraîchit toutes les cinq secondes et garde les 200 derniers événements en mémoire, jusqu’au prochain redémarrage. Les mêmes événements sont écrits sur la sortie du conteneur pour l’onglet **Logs** de WDock.
+
 ## Cloudflare Workers
 
 L’entrée `src/index.js` reste compatible avec le Worker configuré dans `wrangler.toml`. Avec Wrangler installé, utilise `npm run deploy`.

@@ -26,7 +26,7 @@ function json(data, status = 200, headers = {}) {
   return Response.json(data, { status, headers: { ...CORS, ...headers } });
 }
 
-export function createAddon({ fetcher = (...args) => fetch(...args), coalesce = true } = {}) {
+export function createAddon({ fetcher = (...args) => fetch(...args), coalesce = true, onLookup } = {}) {
   const cache = new Map();
   const pending = new Map();
 
@@ -72,12 +72,16 @@ export function createAddon({ fetcher = (...args) => fetch(...args), coalesce = 
 
     const meta = url.pathname.match(/^\/meta\/(movie|series)\/(tt\d{7,12})(?::\d+){0,2}\.json$/);
     if (meta) {
+      const startedAt = performance.now();
       const [, type, id] = meta;
       const { title, allocine, apple } = await getTrailers(id, type, tmdbApiKey);
       const links = allocine.map(trailers => ({ trailers, provider: 'AlloCiné · VF' }));
       if (apple) {
         const trailers = new URL(`/bande-annonce/${type}/${id}.m3u8`, url).href;
         links.push({ trailers, provider: 'Apple TV · VF' });
+      }
+      if (request.method === 'GET') {
+        onLookup?.({ id, type, title, providers: [...new Set(links.map(link => link.provider))], durationMs: Math.round(performance.now() - startedAt) });
       }
       return json({ meta: { id, type, name: title, links } });
     }
